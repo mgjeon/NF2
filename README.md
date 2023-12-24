@@ -17,7 +17,7 @@ mamba update -y mamba
 mamba install -y python=3.10 ipykernel
 pip install --upgrade pip
 mamba install -y pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
-mamba install -y lightning numpy scipy matplotlib sunpy astropy wandb scikit-image scikit-learn tqdm gdown ipywidgets
+mamba install -y lightning numpy scipy matplotlib sunpy astropy wandb scikit-image scikit-learn tqdm gdown ipywidgets mayavi
 
 pip install -e .
 ```
