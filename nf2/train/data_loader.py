@@ -807,6 +807,7 @@ class SphericalDataModule(LightningDataModule):
             values = values[~nan_mask]
             errors = errors[~nan_mask]
             # ranges = ranges[~nan_mask]
+            # errors = errors[~nan_mask]
 
         # normalize data
         values = values / b_norm
@@ -822,7 +823,6 @@ class SphericalDataModule(LightningDataModule):
         coords = coords[r]
         transform = transform[r]
         values = values[r]
-        errors = errors[r]
         # ranges = ranges[r]
 
         # store data to disk
@@ -863,7 +863,7 @@ class SphericalDataModule(LightningDataModule):
         [os.remove(f) for f in self.batches_path.values()]
 
     def train_dataloader(self):
-        data_loader = DataLoader(self.dataset, batch_size=None, num_workers=self.num_workers, pin_memory=True, shuffle=True)
+        data_loader = DataLoader(self.dataset, batch_size=None, num_workers=self.num_workers, pin_memory=True)
         random_loader = DataLoader(self.random_dataset, batch_size=None, num_workers=self.num_workers, pin_memory=True,
                                    sampler=RandomSampler(self.dataset, replacement=True, num_samples=len(self.dataset)))
         return {'boundary': data_loader, 'random': random_loader}
@@ -1292,25 +1292,6 @@ class SHARPSeriesDataModule(SHARPDataModule):
         # re-initialize
         super().__init__(self.file_paths[0], *self.args, **self.kwargs)
         del self.file_paths[0]  # continue with next file in list
-        return super().train_dataloader()
-
-class SphericalSeriesDataModule(SphericalDataModule):
-    def __init__(self, full_disk_files, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-        self.full_disk_files = copy(full_disk_files)
-        self.current_files = self.full_disk_files[0]
-
-        super().__init__(full_disk_files=self.full_disk_files[0], *self.args, **self.kwargs)
-
-    def train_dataloader(self):
-        if len(self.full_disk_files) == 0:
-            return None
-        # re-initialize
-        print(f"Load next file: {os.path.basename(self.full_disk_files[0]['Br'])}")
-        self.current_files = self.full_disk_files[0]
-        super().__init__(full_disk_files=self.full_disk_files[0], *self.args, **self.kwargs)
-        del self.full_disk_files[0]
         return super().train_dataloader()
 
 

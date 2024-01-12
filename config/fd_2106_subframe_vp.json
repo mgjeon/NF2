@@ -1,8 +1,15 @@
 {
+<<<<<<< HEAD
   "base_path": "/glade/work/rjarolim/global/subframe/2106_subframe_vp_v1",
   "logging": {
     "wandb_entity": "robert_jarolim",
     "wandb_project": "global_subframe",
+=======
+  "base_path": "/gpfs/gpfs0/robert.jarolim/full_disk/2106_subframe_vp_v6",
+  "logging": {
+    "wandb_entity": "robert_jarolim",
+    "wandb_project": "full_disk",
+>>>>>>> parent of 0031bd9... update config files, add series download and evaluation, fix error estimates, add spherical for series extrapolation
     "wandb_name": "2106_subframe_vp",
     "wandb_id": null
   },
@@ -33,7 +40,11 @@
     },
     "b_norm": 2000,
     "batch_size": {"boundary":  8192, "random":  16384},
+<<<<<<< HEAD
     "work_directory": "/glade/derecho/scratch/rjarolim/nf2/2106_subframe_vp_v1",
+=======
+    "work_directory": "/tmp/nf2/2106_subframe_vp_v6",
+>>>>>>> parent of 0031bd9... update config files, add series download and evaluation, fix error estimates, add spherical for series extrapolation
     "num_workers": 8
   },
 
@@ -42,14 +53,19 @@
     "use_height_mapping": false,
     "spherical": true,
     "use_vector_potential": true,
-    "use_positional_encoding": false
+    "use_positional_encoding": true
   },
 
   "training": {
     "epochs": 1e6,
     "lambda_b": {"start": 1e2, "end": 10, "iterations" : 1e5},
+<<<<<<< HEAD
     "lambda_divergence": 0,
     "lambda_force_free": 1e-1,
+=======
+    "lambda_div": 0,
+    "lambda_ff": 1e-1,
+>>>>>>> parent of 0031bd9... update config files, add series download and evaluation, fix error estimates, add spherical for series extrapolation
     "lambda_min_energy": 0,
     "lambda_radial_reg": 0,
     "lambda_energy_gradient": 1e-2,

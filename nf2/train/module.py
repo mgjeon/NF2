@@ -130,17 +130,63 @@ class NF2Module(LightningModule):
         # compute derivatives
         jac_matrix = jacobian(b, coords)
 
-        state_dict = {
-            "b": b, "b_true": b_true, "b_err": b_err, "transform": transform, "coords": coords,
-            "n_boundary_coords": n_boundary_coords,
-            "boundary_coords": coords[:n_boundary_coords], "random_coords": coords[n_boundary_coords:],
-            "boundary_b": b[:n_boundary_coords],  "random_b": b[n_boundary_coords:],
-            "jac_matrix": jac_matrix,
-        }
-        loss_dict = {k: module(**state_dict) for k, module in self.loss_modules.items()}
-        total_loss = sum([self.lambdas[k] * loss_dict[k] for k in loss_dict.keys()])
+        # minimum energy regularization for nan components
+        if torch.isnan(b_true).sum() == 0:
+            min_energy_NaNs_regularization = torch.zeros((1,), device=b_true.device)
+        else:
+            min_energy_NaNs_regularization = boundary_b[torch.isnan(b_true)].pow(2).sum() / torch.isnan(b_true).sum()
 
-        loss_dict['loss'] = total_loss
+        # radial distance weight
+        radius_weight = random_coords.pow(2).sum(-1).pow(0.5) - 1
+
+        # min energy regularization
+        min_energy_regularization = torch.mean(torch.nansum(b[n_boundary_coords:].pow(2), -1) * radius_weight)
+
+        # radial regularization
+        normalization = torch.norm(b[n_boundary_coords:], dim=-1) * torch.norm(random_coords, dim=-1) + 1e-8
+        dot_product = (b[n_boundary_coords:] * random_coords).sum(-1)
+        radial_regularization = 1 - (dot_product / normalization).abs()
+        radial_regularization = (radial_regularization * radius_weight).mean()
+
+        # compute div and ff loss
+        divergence_loss, force_loss  = calculate_loss(b, coords)
+        divergence_loss, force_loss = divergence_loss.mean(), force_loss.mean()
+
+        # magnetic energy radial decrease
+        E = b[n_boundary_coords:].pow(2).sum(-1)
+        dE_dxyz = torch.autograd.grad(E[:, None], random_coords,
+                                      grad_outputs=torch.ones_like(E[:, None]).to(E),
+                                      retain_graph=True, create_graph=True, allow_unused=True)[0]
+        coords_spherical = cartesian_to_spherical(random_coords, f=torch)
+        t = coords_spherical[:, 1]
+        p = coords_spherical[:, 2]
+        dE_dr = (torch.sin(t) * torch.cos(p)) * dE_dxyz[:, 0] + \
+                (torch.sin(t) * torch.sin(p)) * dE_dxyz[:, 1] + \
+                torch.cos(p) * dE_dxyz[:, 2]
+        energy_gradient_regularization = (torch.relu(dE_dr) * radius_weight).mean()
+
+        loss = b_diff * self.lambdas['lambda_b'] + \
+               divergence_loss * self.lambdas['lambda_div'] + \
+               force_loss * self.lambdas['lambda_ff'] + \
+               min_energy_NaNs_regularization * self.lambdas['lambda_min_energy_nans'] + \
+               min_energy_regularization * self.lambdas['lambda_min_energy'] + \
+               radial_regularization * self.lambdas['lambda_radial_reg'] + \
+               energy_gradient_regularization * self.lambdas['lambda_energy_gradient_reg']
+
+
+        loss_dict = {'b_diff': b_diff, 'divergence': divergence_loss, 'force-free': force_loss,
+                     'min_energy_NaNs_regularization': min_energy_NaNs_regularization,
+                     'min_energy_regularization': min_energy_regularization,
+                     'radial_regularization': radial_regularization,
+                     'energy_gradient_regularization': energy_gradient_regularization}
+        if self.use_height_mapping:
+            height_diff = torch.abs(boundary_coords[:, 2] - original_coords[:, 2])
+            normalization = (boundary_batch['height_ranges'][:, 1] - boundary_batch['height_ranges'][:, 0]) + 1e-6
+            height_regularization = torch.true_divide(height_diff, normalization).mean()
+            loss += self.lambdas['lambda_height_reg'] * height_regularization
+            loss_dict['height_regularization'] = height_regularization
+
+        loss_dict['loss'] = loss
         return loss_dict
 
     @torch.no_grad()
@@ -267,11 +313,33 @@ class NF2Module(LightningModule):
             if k in self.scheduled_lambdas or checkpoint_v == v:  # skip scheduled lambdas or same values
                 continue
             print(f'Update lambda {k}: {checkpoint_v} --> {v.data}')
-            state_dict[f'lambdas.{k}'] = v
+            checkpoint['state_dict'][f'lambdas.{k}'] = v
+        super().on_load_checkpoint(checkpoint)
 
-        self.load_state_dict(state_dict, strict=False)
+def calculate_loss(b, coords):
+    jac_matrix = jacobian(b, coords)
+    dBx_dx = jac_matrix[:, 0, 0]
+    dBy_dx = jac_matrix[:, 1, 0]
+    dBz_dx = jac_matrix[:, 2, 0]
+    dBx_dy = jac_matrix[:, 0, 1]
+    dBy_dy = jac_matrix[:, 1, 1]
+    dBz_dy = jac_matrix[:, 2, 1]
+    dBx_dz = jac_matrix[:, 0, 2]
+    dBy_dz = jac_matrix[:, 1, 2]
+    dBz_dz = jac_matrix[:, 2, 2]
+    #
+    rot_x = dBz_dy - dBy_dz
+    rot_y = dBx_dz - dBz_dx
+    rot_z = dBy_dx - dBx_dy
+    #
+    j = torch.stack([rot_x, rot_y, rot_z], -1)
+    jxb = torch.cross(j, b, -1)
+    force_loss = torch.sum(jxb ** 2, dim=-1) / (torch.sum(b ** 2, dim=-1) + 1e-7)
+    divergence_loss = (dBx_dx + dBy_dy + dBz_dz) ** 2
+    return divergence_loss, force_loss
 
-def save(save_path, model, data_module, config):
+
+def save(save_path, model, data_module, config, height_mapping_model=None):
     save_state = {'model': model,
                   'cube_shape': data_module.cube_shape,
                   'b_norm': data_module.b_norm,
