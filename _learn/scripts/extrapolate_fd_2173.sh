@@ -1,0 +1,1 @@
+python -m nf2.extrapolate --config /userhome/jeon_mg/workspace/NF2/_learn/config/fd_2173.json

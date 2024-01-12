@@ -1,0 +1,1 @@
+python -m nf2.data.download_full_disk --download_dir /userhome/jeon_mg/workspace/NF2/_learn/_data/fd_2173 --email mgjeon@khu.ac.kr --carrington_rotation 2173 --t_start 2016-02-05T17:00:00 --convert_ptr --download_synoptic
